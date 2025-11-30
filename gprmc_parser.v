@@ -5,63 +5,39 @@ module gprmc_parser (
     input  wire       clk,
     input  wire       rst,
 
-    // UART input
     input  wire [7:0] rx_data,
     input  wire       rx_valid,
 
-    // Fix status output
-    output reg        fix_valid,    // 1 = Active (A), 0 = Void (V)
+    output reg        fix_valid, 
 
-    // Latitude ASCII digits (DDMMmmmm)
-    output wire [7:0] lat0, lat1, lat2, lat3, lat4, lat5, lat6, lat7,
+    output wire [7:0] lat0, lat1, lat2, lat3, lat4, lat5, lat6, lat7, //latitude4-7 ended not being used but kept anyway
 
-    // Longitude ASCII digits (DDDMMmmm) - we use first 8 chars
-    output wire [7:0] lon0, lon1, lon2, lon3, lon4, lon5, lon6, lon7,
+    output wire [7:0] lon0, lon1, lon2, lon3, lon4, lon5, lon6, lon7, //longitude4-7 not used as well
 
-    // Speed ASCII digits (knots)
-    output wire [7:0] spd0, spd1, spd2, spd3, spd4, spd5,
-    output reg        speed_ready   // 1-cycle pulse when speed field completes
+    output wire [7:0] spd0, spd1, spd2, spd3, spd4, spd5, //speed in knots
+    output reg        speed_ready //1 cycle pulse whenever speed cycle is done
 );
 
-
-    // ---------------------------
-    // Internal Registers
-    // ---------------------------
-
-    // GPRMC header detection state:
-    // 0 = idle
-    // 1 = saw '$'
-    // 2 = "$G"
-    // 3 = "$GP"
-    // 4 = "$GPR"
-    // 5 = "$GPRM"
-    // 6 = "$GPRMC" (valid sentence - stay here until next '$')
     reg [2:0] gprmc_state;
 
-    // Comma counting within a valid GPRMC sentence
-    reg [3:0] comma_count;
+    reg [3:0] comma_count; //counts commas in gpmrc
 
-    // Latitude
+    //latitude
     reg [7:0] lat0_reg, lat1_reg, lat2_reg, lat3_reg;
     reg [7:0] lat4_reg, lat5_reg, lat6_reg, lat7_reg;
     reg [3:0] lat_len;
 
-    // Longitude
+    //longitude
     reg [7:0] lon0_reg, lon1_reg, lon2_reg, lon3_reg;
     reg [7:0] lon4_reg, lon5_reg, lon6_reg, lon7_reg;
     reg [3:0] lon_len;
 
-    // Speed (knots)
+    //speed
     reg [7:0] spd0_reg, spd1_reg, spd2_reg, spd3_reg, spd4_reg, spd5_reg;
     reg [2:0] speed_len;
 
-
-    // ---------------------------
-    // Sequential Logic
-    // ---------------------------
     always @(posedge clk) begin
-        if (rst) begin
-            // Reset parser state
+        if (rst) begin //resets parser state
             gprmc_state  <= 3'd0;
             comma_count  <= 4'd0;
 
@@ -83,33 +59,26 @@ module gprmc_parser (
             spd3_reg <= "0"; spd4_reg <= "0"; spd5_reg <= "0";
         end
         else if (rx_valid) begin
-            // default
-            speed_ready <= 1'b0;
+            speed_ready <= 1'b0; //default 
 
-            // -------------------------------------------------
-            // 1) GPRMC HEADER DETECTION STATE MACHINE
-            // -------------------------------------------------
-            case (gprmc_state)
+            case (gprmc_state) //detects gpmrc header
                 3'd0: begin
-                    // idle, wait for '$'
-                    if (rx_data == "$")
+                    if (rx_data == "$") //idles and waits for $
                         gprmc_state <= 3'd1;
                     else
                         gprmc_state <= 3'd0;
                 end
 
-                3'd1: begin
-                    // saw '$', expect 'G'
+                3'd1: begin //expect G
                     if (rx_data == "G")
                         gprmc_state <= 3'd2;
                     else if (rx_data == "$")
-                        gprmc_state <= 3'd1;   // new '$'
+                        gprmc_state <= 3'd1;
                     else
                         gprmc_state <= 3'd0;
                 end
 
-                3'd2: begin
-                    // "$G", expect 'P'
+                3'd2: begin //expect P
                     if (rx_data == "P")
                         gprmc_state <= 3'd3;
                     else if (rx_data == "$")
@@ -118,8 +87,7 @@ module gprmc_parser (
                         gprmc_state <= 3'd0;
                 end
 
-                3'd3: begin
-                    // "$GP", expect 'R'
+                3'd3: begin //expect R
                     if (rx_data == "R")
                         gprmc_state <= 3'd4;
                     else if (rx_data == "$")
@@ -128,8 +96,7 @@ module gprmc_parser (
                         gprmc_state <= 3'd0;
                 end
 
-                3'd4: begin
-                    // "$GPR", expect 'M'
+                3'd4: begin //exepct M
                     if (rx_data == "M")
                         gprmc_state <= 3'd5;
                     else if (rx_data == "$")
@@ -138,13 +105,11 @@ module gprmc_parser (
                         gprmc_state <= 3'd0;
                 end
 
-                3'd5: begin
-                    // "$GPRM", expect 'C'
+                3'd5: begin //expect C
                     if (rx_data == "C") begin
                         gprmc_state <= 3'd6;
 
-                        // NEW $GPRMC sentence starts here - reset fields
-                        comma_count <= 4'd0;
+                        comma_count <= 4'd0; //reset field, new sentences start here
 
                         lat_len   <= 4'd0;
                         lon_len   <= 4'd0;
@@ -166,9 +131,7 @@ module gprmc_parser (
                 end
 
                 3'd6: begin
-                    // Inside a valid $GPRMC sentence
-                    // If we see another '$', start over
-                    if (rx_data == "$")
+                    if (rx_data == "$") //if we see another $ start over
                         gprmc_state <= 3'd1;
                     else
                         gprmc_state <= 3'd6;
@@ -178,24 +141,16 @@ module gprmc_parser (
             endcase
 
 
-            // -------------------------------------------------
-            // 2) Within a valid $GPRMC sentence (state = 6)
-            // -------------------------------------------------
-            if (gprmc_state == 3'd6) begin
+            if (gprmc_state == 3'd6) begin //state = 6 when in valid
 
-                // 2a) Count commas to know which field we're in
-                if (rx_data == ",")
+                if (rx_data == ",") //count commas
                     comma_count <= comma_count + 1'b1;
 
-                // 2b) FIELD 2 - Fix status (A / V)
-                // comma_count == 2 while reading the status char
-                if (comma_count == 4'd2 && rx_data != "," ) begin
+                if (comma_count == 4'd2 && rx_data != "," ) begin //used to get fix status A/V (not used)
                     fix_valid <= (rx_data == "A") ? 1'b1 : 1'b0;
                 end
 
-                // 2c) FIELD 3 - Latitude DDMMmmmm
-                // comma_count == 3 while reading latitude characters
-                if (comma_count == 4'd3) begin
+                if (comma_count == 4'd3) begin //read in latitude when at at third comma
                     if (rx_data != ",") begin
                         case (lat_len)
                             4'd0: lat0_reg <= rx_data;
@@ -211,13 +166,11 @@ module gprmc_parser (
                             lat_len <= lat_len + 1'b1;
                     end
                     else begin
-                        lat_len <= 4'd0; // end of latitude field
+                        lat_len <= 4'd0; //end of latitude
                     end
                 end
 
-                // 2d) FIELD 5 - Longitude DDDMMmmm...
-                // comma_count == 5 while reading longitude characters
-                if (comma_count == 4'd5) begin
+                if (comma_count == 4'd5) begin //read in longitude at fifth comma
                     if (rx_data != ",") begin
                         case (lon_len)
                             4'd0: lon0_reg <= rx_data;
@@ -233,13 +186,11 @@ module gprmc_parser (
                             lon_len <= lon_len + 1'b1;
                     end
                     else begin
-                        lon_len <= 4'd0; // end of longitude field
+                        lon_len <= 4'd0; //end longitude
                     end
                 end
 
-                // 2e) FIELD 7 - Speed in knots (ASCII)
-                // comma_count == 7 while reading speed characters
-                if (comma_count == 4'd7) begin
+                if (comma_count == 4'd7) begin //read in speed at 7th comma
                     if (rx_data != ",") begin
                         case (speed_len)
                             3'd0: spd0_reg <= rx_data;
@@ -252,25 +203,21 @@ module gprmc_parser (
                         if (speed_len < 3'd5)
                             speed_len <= speed_len + 1'b1;
 
-                        speed_ready <= 1'b0;   // only pulse on comma at end
+                        speed_ready <= 1'b0; //pulse on comma end
                     end
                     else begin
-                        // end of speed field
                         speed_ready <= 1'b1;
                         speed_len   <= 3'd0;
                     end
                 end
 
-            end // if (gprmc_state == 6)
+            end
 
-        end // else if (rx_valid)
-    end // always @(posedge clk)
+        end
+    end
 
 
-
-    // ---------------------------------
-    // Output assignments
-    // ---------------------------------
+    //output assignments
     assign lat0 = lat0_reg;
     assign lat1 = lat1_reg;
     assign lat2 = lat2_reg;
