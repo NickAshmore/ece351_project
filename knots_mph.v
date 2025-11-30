@@ -37,30 +37,29 @@ module knots_to_mph (
 
         else if (speed_ready) begin
 
-            // convert ASCII → digits
-            k0 = (spd0 >= "0" && spd0 <= "9") ? (spd0 - "0") : 0;
+            k0 = (spd0 >= "0" && spd0 <= "9") ? (spd0 - "0") : 0; //subtract ascii 0 to convert the number
             k1 = (spd1 == ".")                ? -1          : (spd1 - "0");
             k2 = (spd2 >= "0" && spd2 <= "9") ? (spd2 - "0") : 0;
             k3 = (spd3 >= "0" && spd3 <= "9") ? (spd3 - "0") : 0;
 
-            // convert ASCII speed to fixed-point ×100
-            if (k1 == -1) // format X.YY
+            //converts ASCII speed to fixed point ×100
+            if (k1 == -1) //format X.YY
                 num = (k0 * 100) + (k2 * 10) + k3;
-            else          // format XX.Y
+            else  //format XX.Y
                 num = (k0 * 1000) + (k1 * 100) + (k2 * 10) + k3;
 
             speed_knots_x100 <= num;
 
-            // convert knots×100 → mph×100 (approx *1.15)
+            //convert knots×100 to mph×100
             mph_x100 <= (num * 115) / 100;
 
-            // output MPH digits
+            //output MPH digits in 4 bit segments
             mph0 <= (mph_x100 / 1000) % 10;
             mph1 <= (mph_x100 / 100)  % 10;
             mph2 <= (mph_x100 / 10)   % 10;
             mph3 <= (mph_x100 / 1)    % 10;
 
-            // output raw MPH ×100
+            //output raw MPH ×100, had this just in case the 16 bit was needed
             mph_x100_out <= mph_x100;
         end
     end
